@@ -61,9 +61,6 @@ def ingest_documents(data_path: str):
     print("✅ Documents successfully indexed")
 
 
-# -------------------------------
-# Run from Terminal
-# -------------------------------
 if __name__ == "__main__":
     create_pinecone_index()
     ingest_documents("data/")
