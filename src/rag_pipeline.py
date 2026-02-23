@@ -4,11 +4,30 @@ from langchain.chains import create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
 
+# ✅ Memory imports
+from langchain.memory import ConversationBufferMemory
+from langchain_core.runnables.history import RunnableWithMessageHistory
+from langchain_community.chat_message_histories import ChatMessageHistory
+
 from src.helper import download_hugging_face_embeddings
 from src.prompt import system_prompt
 from src.config import INDEX_NAME, MODEL_NAME
 
 
+# -------------------------------
+# Session-based memory storage
+# -------------------------------
+store = {}
+
+def get_session_history(session_id: str):
+    if session_id not in store:
+        store[session_id] = ChatMessageHistory()
+    return store[session_id]
+
+
+# -------------------------------
+# Create RAG Chain
+# -------------------------------
 def create_rag_chain():
 
     # embeddings
@@ -25,20 +44,46 @@ def create_rag_chain():
         search_kwargs={"k": 3}
     )
 
-    # ✅ Gemini LLM
+    # Gemini LLM
     chat_model = ChatGoogleGenerativeAI(
         model=MODEL_NAME,
-        temperature=0.3
+        temperature=0.3,
+        max_retries=1   # prevents long retry delays
     )
 
-    # prompt
+    # ✅ Buffer Memory (FAST)
+    memory = ConversationBufferMemory(
+        memory_key="chat_history",
+        return_messages=True
+    )
+
+    # Prompt (history included)
     prompt = ChatPromptTemplate.from_messages([
         ("system", system_prompt),
+        ("placeholder", "{chat_history}"),
         ("human", "{input}")
     ])
 
-    # chains
-    qa_chain = create_stuff_documents_chain(chat_model, prompt)
-    rag_chain = create_retrieval_chain(retriever, qa_chain)
+    # QA chain
+    qa_chain = create_stuff_documents_chain(
+        chat_model,
+        prompt,
+        document_variable_name="context"
+    )
 
-    return rag_chain
+    # RAG chain
+    rag_chain = create_retrieval_chain(
+        retriever,
+        qa_chain
+    )
+
+    # ✅ Attach memory
+    rag_chain_with_memory = RunnableWithMessageHistory(
+        rag_chain,
+        get_session_history,
+        input_messages_key="input",
+        history_messages_key="chat_history",
+        output_messages_key="answer",
+    )
+
+    return rag_chain_with_memory

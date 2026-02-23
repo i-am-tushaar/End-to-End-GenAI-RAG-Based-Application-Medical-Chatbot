@@ -3,7 +3,7 @@ from src.rag_pipeline import create_rag_chain
 
 app = Flask(__name__)
 
-# initialize RAG once at startup
+# Initialize RAG once
 rag_chain = create_rag_chain()
 
 
@@ -16,9 +16,13 @@ def index():
 def chat():
     user_message = request.form["msg"]
 
-    response = rag_chain.invoke({
-        "input": user_message
-    })
+    # ✅ unique memory per user
+    session_id = request.remote_addr
+
+    response = rag_chain.invoke(
+        {"input": user_message},
+        config={"configurable": {"session_id": session_id}}
+    )
 
     return str(response["answer"])
 
